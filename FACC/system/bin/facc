@@ -1,0 +1,341 @@
+#!/system/bin/sh
+# facc — CLI utama FACC (Faa App Cache Cleaner)
+# CLI First: semua kemampuan WebUI & scheduler memanggil CLI ini.
+# Aman: CLI hanya memanggil clean_cache() dari core.sh, tidak ada rm sendiri.
+
+FACC_VERSION="1.0.3"
+
+# Resolve MODDIR (Magisk / KernelSU / manual)
+MODDIR="${MODDIR:-}"
+if [ -z "$MODDIR" ]; then
+  for _m in /data/adb/modules/facc /data/adb/modules_update/facc; do
+    if [ -f "$_m/common/core.sh" ]; then MODDIR="$_m"; break; fi
+  done
+  unset _m
+fi
+# Fallback: lokasi script ini -> <mod>/system/bin/facc => <mod>
+if [ -z "$MODDIR" ] || [ ! -f "$MODDIR/common/core.sh" ]; then
+  _here="$(dirname "$0" 2>/dev/null)"
+  case "$_here" in
+    */system/bin) MODDIR="$(dirname "$(dirname "$_here")")" ;;
+    */bin)        MODDIR="$(dirname "$(dirname "$_here")")" ;;
+  esac
+  unset _here
+fi
+# Fallback terakhir: direktori kerja saat testing di PC
+[ -f "$MODDIR/common/core.sh" ] || {
+  for _m in "$(pwd)" "$(pwd)/FACC" "$(dirname "$0")/.." "$(dirname "$0")/../FACC"; do
+    if [ -f "$_m/common/core.sh" ]; then MODDIR="$_m"; break; fi
+  done
+  unset _m
+}
+
+# shellcheck source=/dev/null
+[ -n "$MODDIR" ] && [ -f "$MODDIR/common/core.sh" ] && . "$MODDIR/common/core.sh"
+# Jika core gagal diload, coba path relatif
+command -v validate_package >/dev/null 2>&1 || {
+  for _c in ./common/core.sh ./FACC/common/core.sh ../common/core.sh; do
+    [ -f "$_c" ] && . "$_c" 2>/dev/null && break
+  done
+  unset _c
+}
+command -v validate_package >/dev/null 2>&1 || {
+  echo "FATAL: core.sh tidak ditemukan. MODDIR=$MODDIR" >&2
+  exit 1
+}
+
+# Config
+FACC_CONF_PERSIST="/data/adb/facc/facc.conf"
+FACC_CONF_MOD="$MODDIR/config/facc.conf"
+FACC_CONF=""
+[ -f "$FACC_CONF_PERSIST" ] && FACC_CONF="$FACC_CONF_PERSIST"
+[ -z "$FACC_CONF" ] && [ -f "$FACC_CONF_MOD" ] && FACC_CONF="$FACC_CONF_MOD"
+
+facc_version() {
+  echo "FACC v$FACC_VERSION — Faa App Cache Cleaner by Faa Ramadhan"
+}
+
+facc_help() {
+  cat <<'EOF'
+Penggunaan: facc [PERINTAH] [OPSI]
+
+Perintah:
+  (tanpa argumen)        Menu interaktif
+  --scan [--json]        Pindai cache semua aplikasi (tanpa menghapus)
+  --clean [PKG] [--json] Bersihkan cache (semua app / satu package)
+  --status [--json]      Ringkasan: total cache, jumlah app, jadwal
+  --logs [--lines N]     Tampilkan log terakhir
+  --config               Tampilkan config aktif
+  --version              Tampilkan versi
+  --help                 Bantuan ini
+
+Contoh:
+  su -c "facc --scan"
+  su -c "facc --clean"
+  su -c "facc --clean com.android.chrome"
+  su -c "facc --status --json"
+EOF
+}
+
+# ---------- JSON helpers (tanpa dependensi jq) ----------
+_json_escape() {
+  echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+# ---------- SCAN ----------
+# Output teks + return via stdout. Mode --json: {"apps":N,"total_bytes":X,...}
+facc_cmd_scan() {
+  _json=0
+  for _a in "$@"; do [ "$_a" = "--json" ] && _json=1; done
+  facc_log_info "FACC started (scan)"
+  _data=$(facc_scan_all)
+  _apps=0; _total=0; _with_cache=0
+  _json_items=""
+  while read -r _line; do
+    [ -z "$_line" ] && continue
+    _pkg=$(echo "$_line" | cut -d'|' -f1)
+    _bytes=$(echo "$_line" | cut -d'|' -f2)
+    _dirs=$(echo "$_line" | cut -d'|' -f3)
+    case "$_bytes" in ''|*[!0-9]*) _bytes=0 ;; esac
+    _apps=$((_apps + 1))
+    _total=$((_total + _bytes))
+    # String compare (!= "0"), bukan [ -gt 0 ] — aman dari overflow
+    # aritmetika 32-bit mksh untuk cache raksasa.
+    [ "$_bytes" != "0" ] && _with_cache=$((_with_cache + 1))
+    if [ "$_json" = "1" ]; then
+      _ep=$(_json_escape "$_pkg"); _ed=$(_json_escape "$_dirs")
+      _json_items="$_json_items{\"package\":\"$_ep\",\"bytes\":$_bytes,\"human\":\"$(facc_human_size "$_bytes")\",\"dirs\":\"$_ed\"},"
+    else
+      if [ "$_bytes" -gt 0 ]; then
+        printf "  %-40s %10s\n" "$_pkg" "$(facc_human_size "$_bytes")"
+      fi
+    fi
+  done <<EOF_SCAN
+$_data
+EOF_SCAN
+  facc_log_scan "$_apps packages detected, $(facc_human_size "$_total") cache"
+  if [ "$_json" = "1" ]; then
+    _json_items=$(echo "$_json_items" | sed 's/,$//')
+    echo "{\"apps\":$_apps,\"apps_with_cache\":$_with_cache,\"total_bytes\":$_total,\"total_human\":\"$(facc_human_size "$_total")\",\"items\":[$_json_items]}"
+  else
+    echo ""
+    echo "Cache found : $(facc_human_size "$_total")"
+    echo "Apps        : $_apps (ber-cache: $_with_cache)"
+  fi
+  unset _a _data _apps _total _with_cache _json_items _line _pkg _bytes _dirs _ep _ed
+}
+
+# ---------- CLEAN ----------
+facc_cmd_clean() {
+  _json=0; _target=""
+  for _a in "$@"; do
+    case "$_a" in
+      --json) _json=1 ;;
+      -*) ;;
+      *) _target="$_a" ;;
+    esac
+  done
+  facc_require_root || { [ "$_json" = "1" ] && echo '{"ok":false,"error":"need root"}'; return 1; }
+  facc_log_info "FACC started (clean${_target:+ pkg=$_target})"
+
+  if [ -n "$_target" ]; then
+    if ! validate_package "$_target"; then
+      echo "❌ CLEANUP ABORTED - Reason: invalid package ($_target)" >&2
+      [ "$_json" = "1" ] && echo "{\"ok\":false,\"error\":\"invalid package\"}"
+      return 1
+    fi
+    if ! facc_package_installed "$_target" 2>/dev/null; then
+      echo "Paket tidak ditemukan: $_target" >&2
+      [ "$_json" = "1" ] && echo "{\"ok\":false,\"error\":\"package not found\"}"
+      return 1
+    fi
+    _freed=$(clean_cache "$_target")
+    _rc=$?
+    if [ "$_rc" -eq 2 ]; then
+      echo "Tidak ada cache untuk $_target (sudah bersih)."
+      [ "$_json" = "1" ] && echo "{\"ok\":true,\"freed_bytes\":0,\"detail\":\"no cache\"}"
+      return 0
+    elif [ "$_rc" -ne 0 ]; then
+      [ "$_json" = "1" ] && echo '{"ok":false,"error":"cleanup failed"}'
+      return "$_rc"
+    fi
+    case "$_freed" in ''|*[!0-9]*) _freed=0 ;; esac
+    facc_log_info "Freed $(facc_human_size "$_freed")"
+    if [ "$_json" = "1" ]; then
+      echo "{\"ok\":true,\"freed_bytes\":$_freed,\"freed_human\":\"$(facc_human_size "$_freed")\"}"
+    else
+      echo "✔ Dibersihkan: $_target — $(facc_human_size "$_freed") dibebaskan."
+    fi
+    return 0
+  fi
+
+  # Bersihkan semua
+  _data=$(facc_scan_all)
+  _apps=0; _freed_total=0; _cleaned=0; _failed=0
+  _json_items=""
+  while read -r _line; do
+    [ -z "$_line" ] && continue
+    _pkg=$(echo "$_line" | cut -d'|' -f1)
+    _bytes=$(echo "$_line" | cut -d'|' -f2)
+    case "$_bytes" in ''|*[!0-9]*) _bytes=0 ;; esac
+    [ "$_bytes" = "0" ] && continue
+    _apps=$((_apps + 1))
+    _out=$(clean_cache "$_pkg" 2>/dev/null)
+    _rc=$?
+    if [ "$_rc" -eq 0 ]; then
+      case "$_out" in ''|*[!0-9]*) _out=0 ;; esac
+      _freed_total=$((_freed_total + _out))
+      _cleaned=$((_cleaned + 1))
+      [ "$_json" = "0" ] && printf "  ✔ %-38s %10s\n" "$_pkg" "$(facc_human_size "$_out")"
+      _ep=$(_json_escape "$_pkg")
+      _json_items="$_json_items{\"package\":\"$_ep\",\"freed\":$_out},"
+    else
+      _failed=$((_failed + 1))
+      [ "$_json" = "0" ] && printf "  ✘ %-38s gagal\n" "$_pkg"
+    fi
+  done <<EOF_CLEAN
+$_data
+EOF_CLEAN
+  # Simpan state last-run untuk scheduler/WebUI
+  mkdir -p /data/adb/facc 2>/dev/null
+  date "+%Y-%m-%d %H:%M:%S" > /data/adb/facc/last_run 2>/dev/null
+  echo "$_freed_total" > /data/adb/facc/last_freed 2>/dev/null
+
+  facc_log_info "Freed $(facc_human_size "$_freed_total") ($_cleaned apps, $_failed failed)"
+  if [ "$_json" = "1" ]; then
+    _json_items=$(echo "$_json_items" | sed 's/,$//')
+    echo "{\"ok\":true,\"apps_cleaned\":$_cleaned,\"apps_failed\":$_failed,\"freed_bytes\":$_freed_total,\"freed_human\":\"$(facc_human_size "$_freed_total")\",\"items\":[$_json_items]}"
+  else
+    echo ""
+    echo "Selesai: $_cleaned app dibersihkan, $(facc_human_size "$_freed_total") dibebaskan."
+    [ "$_failed" -gt 0 ] && echo "Gagal: $_failed app."
+  fi
+  unset _a _target _data _apps _freed_total _cleaned _failed _json_items _line _pkg _bytes _out _rc _ep
+}
+
+# ---------- STATUS ----------
+facc_cmd_status() {
+  _json=0
+  for _a in "$@"; do [ "$_a" = "--json" ] && _json=1; done
+  _data=$(facc_scan_all)
+  _apps=0; _total=0
+  while read -r _line; do
+    [ -z "$_line" ] && continue
+    _b=$(echo "$_line" | cut -d'|' -f2)
+    case "$_b" in ''|*[!0-9]*) _b=0 ;; esac
+    _apps=$((_apps + 1)); _total=$((_total + _b))
+  done <<EOF_STATUS
+$_data
+EOF_STATUS
+  _last="belum pernah"; _next="-"
+  [ -f /data/adb/facc/last_run ] && _last=$(cat /data/adb/facc/last_run 2>/dev/null)
+  _auto="0"; _interval="30"
+  [ -n "$FACC_CONF" ] && [ -f "$FACC_CONF" ] && {
+    _v=$(grep -E "^AUTO_CLEAN=" "$FACC_CONF" 2>/dev/null | cut -d= -f2 | tr -d ' "')
+    [ -n "$_v" ] && _auto="$_v"
+    _v=$(grep -E "^INTERVAL_MINUTES=" "$FACC_CONF" 2>/dev/null | cut -d= -f2 | tr -d ' "')
+    [ -n "$_v" ] && _interval="$_v"
+    unset _v
+  }
+  if [ "$_json" = "1" ]; then
+    _el=$(_json_escape "$_last")
+    echo "{\"apps\":$_apps,\"total_bytes\":$_total,\"total_human\":\"$(facc_human_size "$_total")\",\"last_cleanup\":\"$_el\",\"auto_clean\":\"$_auto\",\"interval_minutes\":\"$_interval\",\"version\":\"$FACC_VERSION\"}"
+  else
+    echo "FACC Status"
+    echo "  Cache total : $(facc_human_size "$_total")"
+    echo "  Apps        : $_apps"
+    echo "  Last cleanup: $_last"
+    echo "  Auto-clean  : $_auto (tiap $_interval mnt)"
+    echo "  Version     : $FACC_VERSION"
+  fi
+  unset _a _data _apps _total _b _last _next _auto _interval
+}
+
+# ---------- LOGS ----------
+facc_cmd_logs() {
+  _lines=50
+  _prev=""
+  for _a in "$@"; do
+    if [ "$_prev" = "--lines" ]; then _lines="$_a"; _prev=""; continue; fi
+    case "$_a" in --lines) _prev="--lines" ;; --lines=*) _lines=$(echo "$_a" | cut -d= -f2) ;; esac
+  done
+  case "$_lines" in ''|*[!0-9]*) _lines=50 ;; esac
+  _log="$FACC_LOG_FILE"
+  command -v facc_log >/dev/null 2>&1 || _log="/sdcard/facc-log/facc.log"
+  [ -f "$_log" ] || _log="/data/media/0/facc-log/facc.log"
+  if [ ! -f "$_log" ]; then
+    echo "(belum ada log)"
+    return 0
+  fi
+  tail -n "$_lines" "$_log" 2>/dev/null || cat "$_log"
+  unset _lines _prev _a _log
+}
+
+facc_cmd_config() {
+  if [ -n "$FACC_CONF" ] && [ -f "$FACC_CONF" ]; then
+    echo "# Config aktif: $FACC_CONF"
+    cat "$FACC_CONF"
+  else
+    echo "(config tidak ditemukan)"
+  fi
+}
+
+# ---------- MENU INTERAKTIF ----------
+facc_menu() {
+  while true; do
+    _data=$(facc_scan_all)
+    _apps=0; _total=0
+    while read -r _l; do
+      [ -z "$_l" ] && continue
+      _b=$(echo "$_l" | cut -d'|' -f2)
+      case "$_b" in ''|*[!0-9]*) _b=0 ;; esac
+      _apps=$((_apps + 1)); _total=$((_total + _b))
+    done <<EOF_MENU
+$_data
+EOF_MENU
+    echo ""
+    echo "FACC - Faa App Cache Cleaner"
+    echo ""
+    echo "Cache found : $(facc_human_size "$_total")"
+    echo "Apps        : $_apps"
+    echo ""
+    echo "1. Scan"
+    echo "2. Clean"
+    echo "3. Status"
+    echo "4. Logs"
+    echo "5. Config"
+    echo "0. Exit"
+    echo ""
+    printf "Pilih: "
+    read -r _c
+    case "$_c" in
+      1) facc_cmd_scan ;;
+      2)
+        printf "Package (kosongkan = semua): "
+        read -r _p
+        if [ -z "$_p" ]; then facc_cmd_clean; else facc_cmd_clean "$_p"; fi
+        ;;
+      3) facc_cmd_status ;;
+      4) facc_cmd_logs ;;
+      5) facc_cmd_config ;;
+      0|q|Q|x) echo "Bye."; break ;;
+      *) echo "Pilihan tidak dikenal." ;;
+    esac
+  done
+  unset _data _apps _total _l _b _c _p
+}
+
+# ---------- ROUTER ----------
+case "$1" in
+  "") facc_menu ;;
+  --scan) shift; facc_cmd_scan "$@" ;;
+  --clean) shift; facc_cmd_clean "$@" ;;
+  clean) shift; facc_cmd_clean "$@" ;;
+  scan) shift; facc_cmd_scan "$@" ;;
+  --status|status) shift; facc_cmd_status "$@" ;;
+  --logs|logs) shift; facc_cmd_logs "$@" ;;
+  --config|config) shift; facc_cmd_config "$@" ;;
+  --version|-v|version) facc_version ;;
+  --help|-h|help) facc_help ;;
+  *) echo "Argumen tidak dikenal: $1"; echo ""; facc_help; exit 1 ;;
+esac

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FACC — Faa App Cache Cleaner</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">🧹 FACC</div>
+  <div class="subtitle">Faa App Cache Cleaner</div>
+  <div class="conn"><span id="connDot" class="dot gray"></span><span id="connText">menghubungkan…</span></div>
+</header>
+
+<main>
+  <section class="cards">
+    <div class="card">
+      <div class="label">Cache</div>
+      <div class="value" id="statCache">~</div>
+    </div>
+    <div class="card">
+      <div class="label">Apps</div>
+      <div class="value" id="statApps">~</div>
+    </div>
+    <div class="card">
+      <div class="label">Last cleanup</div>
+      <div class="value small" id="statLast">-</div>
+    </div>
+    <div class="card">
+      <div class="label">Next cleanup</div>
+      <div class="value small" id="statNext">-</div>
+    </div>
+  </section>
+
+  <section class="actions">
+    <button id="btnScan" class="btn primary">🔍 Scan</button>
+    <button id="btnClean" class="btn danger">🧹 Clean</button>
+    <button id="btnStatus" class="btn">↻ Status</button>
+  </section>
+  <div id="alert" class="alert hidden"></div>
+  <p id="bridgeHint" class="hint"></p>
+
+  <section class="panel">
+    <h2>Hasil Scan</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Package</th><th>Cache</th><th>Aksi</th></tr></thead>
+        <tbody id="appRows">
+          <tr><td colspan="3" class="muted">Belum ada data. Tekan Scan.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel two-col">
+    <div>
+      <h2>Log</h2>
+      <pre id="logView" class="log">(log kosong)</pre>
+      <button id="btnLogs" class="btn small">Muat log</button>
+    </div>
+    <div>
+      <h2>Config & Scheduler</h2>
+      <label class="row"><input type="checkbox" id="cfgAuto" /> Auto-clean aktif</label>
+      <label class="row">Interval (menit)
+        <input type="number" id="cfgInterval" min="5" max="1440" value="30" />
+      </label>
+      <button id="btnSaveCfg" class="btn small">Simpan (via CLI)</button>
+      <p class="hint">WebUI tidak punya logika sendiri — semua perintah diteruskan ke <code>facc</code> core via exec bridge.</p>
+      <pre id="cfgView" class="log small">(config belum dimuat)</pre>
+    </div>
+  </section>
+</main>
+
+<footer>v1.0.3 • by Faa Ramadhan • aman: tanpa pm clear, tanpa hapus data</footer>
+<script src="js/app.js"></script>
+</body>
+</html>

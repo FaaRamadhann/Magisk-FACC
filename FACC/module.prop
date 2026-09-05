@@ -1,0 +1,6 @@
+id=facc
+name=Faa App Cache Cleaner (FACC)
+version=v1.0.3
+versionCode=10003
+author=Faa Ramadhan
+description=Pembersih cache aplikasi yang aman. Tanpa hapus data, tanpa pm clear. Ada CLI, auto-clean terjadwal, log lengkap, dan WebUI.

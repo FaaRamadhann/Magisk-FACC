@@ -1,0 +1,16 @@
+# Build output — pakai GitHub Releases untuk distribusi zip
+*.zip
+
+# Spec internal & scratch
+task.md
+temp/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
