@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Build FACC Magisk module zip.
+"""Pack repo ini menjadi zip module Magisk (anti-bug backslash).
+
+Repo root = module root (mirip Magisk-Python): module.prop ada di sini.
 
 Pakai:
-    python build.py              -> output FACC-v<version>.zip di folder ini
-    python build.py -o out.zip   -> nama file custom
-    python build.py --no-version -> output FACC.zip tanpa versi
+    python zip.py              -> output FACC-v<version>.zip di folder ini
+    python zip.py -o out.zip   -> nama file custom
+    python zip.py --no-version -> output FACC.zip tanpa versi
 
 Catatan backslash (Windows):
     - Script ini TIDAK memakai string path Windows mentah seperti
@@ -22,10 +24,10 @@ import re
 import sys
 import zipfile
 
-# Direktori script ini (= root project, berisi folder FACC/).
+# Direktori script ini (= repo root = module root).
 # Pakai Path, bukan string "D:\..." -> bebas error backslash.
 ROOT = pathlib.Path(__file__).resolve().parent
-MODULE_DIR = ROOT / "FACC"
+MODULE_DIR = ROOT
 
 # File yang wajib ada sebelum di-pack.
 REQUIRED = [
@@ -41,10 +43,11 @@ REQUIRED = [
     "webroot/index.html",
 ]
 
-# File/dir yang dikecualikan dari zip.
-EXCLUDE_DIRS = {"temp", "__pycache__", ".git", ".hg", ".svn", "archive"}
-EXCLUDE_FILES = {".DS_Store", "Thumbs.db"}
-EXCLUDE_SUFFIXES = {".pyc", ".pyo"}
+# File/dir yang dikecualikan dari zip (file dev, bukan bagian module).
+# "FACC" = sisa folder kosong lama (struktur sebelum v1.0.4); abaikan bila ada.
+EXCLUDE_DIRS = {"temp", "__pycache__", ".git", ".hg", ".svn", "archive", "FACC"}
+EXCLUDE_FILES = {".DS_Store", "Thumbs.db", "zip.py", ".gitignore", ".gitattributes"}
+EXCLUDE_SUFFIXES = {".pyc", ".pyo", ".zip"}
 
 # File yang butuh bit executable di dalam zip (Magisk baca external_attr).
 EXECUTABLES = {
@@ -153,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
 
     result = build(MODULE_DIR, out)
     size_kb = result.stat().st_size / 1024
-    print(f"OK: {result.name} ({size_kb:.1f} KB) dari {MODULE_DIR.name}/")
+    print(f"OK: {result.name} ({size_kb:.1f} KB) dari repo root")
     return 0
 
 

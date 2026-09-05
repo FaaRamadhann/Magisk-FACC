@@ -1,7 +1,4 @@
-# Build output — pakai GitHub Releases untuk distribusi zip
-*.zip
-
-# Spec internal & scratch
+# Catatan internal & scratch (jangan push)
 task.md
 temp/
 
@@ -9,6 +6,11 @@ temp/
 __pycache__/
 *.pyc
 *.pyo
+
+# Zip lama (hanya zip rilis terbaru yang di-commit)
+FACC-v1.0.0.zip
+FACC-v1.0.1.zip
+FACC-v1.0.2.zip
 
 # OS / editor
 .DS_Store
