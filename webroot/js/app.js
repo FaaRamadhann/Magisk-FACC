@@ -96,7 +96,7 @@
   }
 
   // ---------- Mock data (Fase 6: UI statis dulu) ----------
-  var MOCK_STATUS = { apps: 47, total_bytes: 603 * 1048576, total_human: "603.0 MB", last_cleanup: "2026-09-05 07:30", auto_clean: "1", interval_minutes: "30", version: "1.0.0" };
+  var MOCK_STATUS = { apps: 47, total_bytes: 603 * 1048576, total_human: "603.0 MB", last_cleanup: "2026-09-05 07:30", auto_clean: "1", interval_minutes: "30", version: "1.0.4" };
   var MOCK_SCAN = { apps: 47, apps_with_cache: 2, total_bytes: 603 * 1048576, total_human: "603.0 MB", items: [
     { package: "com.android.chrome", bytes: 190840832, human: "182.0 MB" },
     { package: "com.instagram.android", bytes: 441458688, human: "421.0 MB" }

@@ -34,7 +34,7 @@ if [ -z "$__FACC_LOGGER_LOADED" ]; then
   facc_log_error() { echo "ERROR: $*" >&2; }
 fi
 
-FACC_VERSION="${FACC_VERSION:-1.0.3}"
+FACC_VERSION="${FACC_VERSION:-1.0.4}"
 
 # Direktori data yang dipindai per user. Owner 0 ada di /data/data.
 # Multi-user lain di /data/user/<id>/.
@@ -230,6 +230,23 @@ facc_human_size() {
     else if (b >= 1024) printf "%.0f KB", b/1024;
     else printf "%d B", b;
   }'
+}
+
+# ---------------------------------------------------------------
+# facc_validate_interval(menit) : validasi durasi auto-clean.
+# Cetak nilai ternormalisasi (tanpa nol depan), return 1 bila invalid.
+# Batas: 5 - 1440 menit (1440 = 24 jam). Murni string/digit, aman di mksh
+# 32-bit (nilai kecil) dan tahan input oktal ("08" -> 8, bukan error).
+# ---------------------------------------------------------------
+facc_validate_interval() {
+  _in="$1"
+  case "$_in" in ''|*[!0-9]*) return 1 ;; esac
+  _in=$(echo "$_in" | sed 's/^0*//')
+  [ -z "$_in" ] && _in="0"
+  [ "$_in" -ge 5 ] 2>/dev/null || return 1
+  [ "$_in" -le 1440 ] 2>/dev/null || return 1
+  echo "$_in"
+  unset _in
 }
 
 # ---------------------------------------------------------------

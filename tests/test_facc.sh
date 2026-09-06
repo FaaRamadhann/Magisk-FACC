@@ -70,6 +70,20 @@ H=$(facc_human_size 190840832)
 H=$(facc_human_size 6442450944)
 [ "$H" = "6.00 GB" ] && ok "human GB" || bad "human GB dapat $H"
 
+echo "-- facc_validate_interval (5-1440 mnt, maks 24 jam) --"
+[ "$(facc_validate_interval 30)" = "30" ] && ok "30 -> 30" || bad "30 ditolak"
+[ "$(facc_validate_interval 5)" = "5" ] && ok "batas bawah 5" || bad "5 ditolak"
+[ "$(facc_validate_interval 1440)" = "1440" ] && ok "batas atas 1440" || bad "1440 ditolak"
+[ "$(facc_validate_interval 060)" = "60" ] && ok "060 -> 60 (nol depan)" || bad "060 gagal"
+[ "$(facc_validate_interval 120)" = "120" ] && ok "120 (2 jam)" || bad "120 ditolak"
+assert1 facc_validate_interval 4
+assert1 facc_validate_interval 1441
+assert1 facc_validate_interval 0
+assert1 facc_validate_interval ""
+assert1 facc_validate_interval abc
+assert1 facc_validate_interval "60 mnt"
+assert1 facc_validate_interval -30
+
 echo "-- malformed config parser --"
 echo 'AUTO_CLEAN=xx
 INTERVAL_MINUTES=-5

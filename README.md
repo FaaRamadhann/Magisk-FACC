@@ -48,7 +48,7 @@ python zip.py
 Perintah `python zip.py` menghasilkan file:
 
 ```
-FACC-v1.0.3.zip
+FACC-v1.0.4.zip
 ```
 
 **Langkah 1 — Hubungkan HP ke PC:**
@@ -64,12 +64,12 @@ adb devices
 **Langkah 2 — Push zip ke HP:**
 
 ```
-adb push FACC-v1.0.3.zip /sdcard/
+adb push FACC-v1.0.4.zip /sdcard/
 ```
 
 **Langkah 3 — Install lewat manager root (dari HP):**
 
-Buka aplikasi **Magisk / KernelSU / APatch / MMRL** → **Modul** → **Install dari penyimpanan** → pilih `FACC-v1.0.3.zip`.
+Buka aplikasi **Magisk / KernelSU / APatch / MMRL** → **Modul** → **Install dari penyimpanan** → pilih `FACC-v1.0.4.zip`.
 
 Atau via terminal/shell (root):
 
@@ -77,7 +77,7 @@ Atau via terminal/shell (root):
 # masuk shell adb
 adb shell
 # lalu jalankan sebagai root
-su -c 'magisk --install-module /sdcard/FACC-v1.0.3.zip'
+su -c 'magisk --install-module /sdcard/FACC-v1.0.4.zip'
 ```
 
 **Langkah 4 — Reboot**, lalu cek:
@@ -109,7 +109,7 @@ python zip.py
 **Langkah 3 — Pindahkan zip ke penyimpanan (agar bisa dipilih manager):**
 
 ```
-cp FACC-v1.0.3.zip /sdcard/
+cp FACC-v1.0.4.zip /sdcard/
 ```
 
 **Langkah 4 — Install via manager root:**
@@ -119,7 +119,7 @@ Buka aplikasi **Magisk / KernelSU / APatch / MMRL** → **Modul** → **Install 
 Atau lewat Termux dengan root:
 
 ```
-su -c 'magisk --install-module /sdcard/FACC-v1.0.3.zip'
+su -c 'magisk --install-module /sdcard/FACC-v1.0.4.zip'
 ```
 
 **Langkah 5 — Reboot**, lalu cek:
@@ -141,14 +141,19 @@ su -c "facc --status --json"            # untuk WebUI / scripting
 su -c "facc --logs --lines 100"
 ```
 
-Config scheduler — edit `/data/adb/facc/facc.conf`:
+Config scheduler — tanpa edit manual, via CLI:
 
-```
-AUTO_CLEAN=1
-INTERVAL_MINUTES=30
+```sh
+su -c "facc --autoclean 60"  # atau: facc -ac 60 (1 jam)
+su -c "facc -ac 120"         # 2 jam (batas: 5-1440 menit = maks 24 jam)
+su -c "facc --acon"          # aktifkan auto-clean
+su -c "facc --acoof"         # matikan auto-clean
+su -c "facc --acstatus"      # status on/off + interval
+su -c "facc --lclean"        # waktu cleanup terakhir
+su -c "facc --clogs"         # reset/hapus log
 ```
 
-Scheduler baca ulang tiap menit (minimal 5, maksimal 1440).
+(Masih bisa edit manual: `/data/adb/facc/facc.conf` — scheduler baca ulang tiap menit.)
 
 ## Struktur Modul
 

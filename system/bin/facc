@@ -3,7 +3,7 @@
 # CLI First: semua kemampuan WebUI & scheduler memanggil CLI ini.
 # Aman: CLI hanya memanggil clean_cache() dari core.sh, tidak ada rm sendiri.
 
-FACC_VERSION="1.0.3"
+FACC_VERSION="1.0.4"
 
 # Resolve MODDIR (Magisk / KernelSU / manual)
 MODDIR="${MODDIR:-}"
@@ -65,15 +65,25 @@ Perintah:
   --clean [PKG] [--json] Bersihkan cache (semua app / satu package)
   --status [--json]      Ringkasan: total cache, jumlah app, jadwal
   --logs [--lines N]     Tampilkan log terakhir
+  --clogs [--json]       Hapus/reset semua log
   --config               Tampilkan config aktif
+  --autoclean M [--json] Set interval auto-clean (M = 5-1440 menit)
+  -ac M [--json]         Alias --autoclean
+  --acon [--json]        Aktifkan auto-clean
+  --acoof [--json]       Matikan auto-clean
+  --acstatus [--json]    Status auto-clean (on/off + interval)
+  --lclean [--json]      Waktu cleanup terakhir
   --version              Tampilkan versi
-  --help                 Bantuan ini
+  --help, -h             Bantuan ini
 
 Contoh:
   su -c "facc --scan"
   su -c "facc --clean"
   su -c "facc --clean com.android.chrome"
   su -c "facc --status --json"
+  su -c "facc --autoclean 60"
+  su -c "facc -ac 120"
+  su -c "facc --acoof"
 EOF
 }
 
@@ -280,6 +290,163 @@ facc_cmd_config() {
   fi
 }
 
+# ---------- CONFIG READ/WRITE (auto-clean tanpa edit manual) ----------
+# Baca: facc_conf_get KEY DEFAULT (tahan malformed, hanya baris KEY=nilai)
+facc_conf_get() {
+  _k="$1"; _d="$2"; _v=""
+  if [ -n "$FACC_CONF" ] && [ -f "$FACC_CONF" ]; then
+    _v=$(grep -E "^${_k}=" "$FACC_CONF" 2>/dev/null | tail -n1 | cut -d= -f2 | tr -d ' "')
+  fi
+  [ -z "$_v" ] && _v="$_d"
+  echo "$_v"
+  unset _k _d _v
+}
+
+# Tulis: facc_conf_set KEY VALUE (selalu ke persist, pertahankan key lain)
+facc_conf_set() {
+  _k="$1"; _v="$2"
+  _cf="$FACC_CONF_PERSIST"
+  mkdir -p /data/adb/facc 2>/dev/null || return 1
+  if [ ! -f "$_cf" ]; then
+    if [ -f "$FACC_CONF_MOD" ]; then
+      cp -af "$FACC_CONF_MOD" "$_cf" 2>/dev/null
+    else
+      printf "AUTO_CLEAN=1\nINTERVAL_MINUTES=30\n" > "$_cf" 2>/dev/null
+    fi
+  fi
+  _tmp="$_cf.tmp.$$"
+  grep -v -E "^${_k}=" "$_cf" 2>/dev/null > "$_tmp" 2>/dev/null
+  echo "${_k}=${_v}" >> "$_tmp"
+  cat "$_tmp" > "$_cf" 2>/dev/null || return 1
+  rm -f "$_tmp" 2>/dev/null
+  FACC_CONF="$_cf"
+  unset _k _v _cf _tmp
+}
+
+# Tampilkan "60 menit (1 jam)" / "120 menit (2 jam)" / "30 menit"
+facc_human_interval() {
+  _m="$1"
+  case "$_m" in ''|*[!0-9]*) _m=0 ;; esac
+  if [ "$_m" -ge 60 ] 2>/dev/null && [ $((_m % 60)) -eq 0 ] 2>/dev/null; then
+    echo "$_m menit ($((_m / 60)) jam)"
+  else
+    echo "$_m menit"
+  fi
+  unset _m
+}
+
+# ---------- AUTOCLEAN ----------
+facc_cmd_autoclean() {
+  _json=0; _dur=""
+  for _a in "$@"; do
+    case "$_a" in --json) _json=1 ;; -*) ;; *) _dur="$_a" ;; esac
+  done
+  if [ -z "$_dur" ]; then
+    echo "Pakai: facc --autoclean {menit}  (5-1440, 1440 = 24 jam)" >&2
+    echo "Contoh: facc --autoclean 60  (= 1 jam)" >&2
+    return 1
+  fi
+  _ok=$(facc_validate_interval "$_dur") || {
+    echo "Durasi tidak valid: $_dur (isi 5-1440 menit, maks 24 jam)" >&2
+    [ "$_json" = "1" ] && echo '{"ok":false,"error":"invalid duration (5-1440)"}'
+    return 1
+  }
+  facc_require_root || { [ "$_json" = "1" ] && echo '{"ok":false,"error":"need root"}'; return 1; }
+  facc_conf_set "AUTO_CLEAN" "1" || { echo "Gagal tulis config" >&2; return 1; }
+  facc_conf_set "INTERVAL_MINUTES" "$_ok" || { echo "Gagal tulis config" >&2; return 1; }
+  facc_log_info "Auto-clean ON, interval $(facc_human_interval "$_ok") (via CLI)"
+  if [ "$_json" = "1" ]; then
+    echo "{\"ok\":true,\"auto_clean\":\"1\",\"interval_minutes\":\"$_ok\"}"
+  else
+    echo "✔ Auto-clean AKTIF, tiap $(facc_human_interval "$_ok")."
+    echo "  Scheduler baca ulang tiap menit, tanpa reboot."
+  fi
+  unset _json _dur _a _ok
+}
+
+facc_cmd_acon() {
+  _json=0
+  for _a in "$@"; do [ "$_a" = "--json" ] && _json=1; done
+  facc_require_root || { [ "$_json" = "1" ] && echo '{"ok":false,"error":"need root"}'; return 1; }
+  facc_conf_set "AUTO_CLEAN" "1" || { echo "Gagal tulis config" >&2; return 1; }
+  _iv=$(facc_conf_get "INTERVAL_MINUTES" "30")
+  facc_log_info "Auto-clean ON (via CLI)"
+  if [ "$_json" = "1" ]; then
+    echo "{\"ok\":true,\"auto_clean\":\"1\",\"interval_minutes\":\"$_iv\"}"
+  else
+    echo "✔ Auto-clean AKTIF (tiap $(facc_human_interval "$_iv"))."
+  fi
+  unset _json _a _iv
+}
+
+facc_cmd_acoof() {
+  _json=0
+  for _a in "$@"; do [ "$_a" = "--json" ] && _json=1; done
+  facc_require_root || { [ "$_json" = "1" ] && echo '{"ok":false,"error":"need root"}'; return 1; }
+  facc_conf_set "AUTO_CLEAN" "0" || { echo "Gagal tulis config" >&2; return 1; }
+  facc_log_info "Auto-clean OFF (via CLI)"
+  if [ "$_json" = "1" ]; then
+    echo '{"ok":true,"auto_clean":"0"}'
+  else
+    echo "✔ Auto-clean MATI. Nyalakan lagi: facc --acon"
+  fi
+  unset _json _a
+}
+
+facc_cmd_acstatus() {
+  _json=0
+  for _a in "$@"; do [ "$_a" = "--json" ] && _json=1; done
+  _auto=$(facc_conf_get "AUTO_CLEAN" "1")
+  _iv=$(facc_conf_get "INTERVAL_MINUTES" "30")
+  if [ "$_json" = "1" ]; then
+    echo "{\"auto_clean\":\"$_auto\",\"interval_minutes\":\"$_iv\"}"
+  else
+    if [ "$_auto" = "1" ]; then
+      echo "Auto-clean : ON (tiap $(facc_human_interval "$_iv"))"
+    else
+      echo "Auto-clean : OFF (interval tersimpan: $(facc_human_interval "$_iv"))"
+    fi
+  fi
+  unset _json _a _auto _iv
+}
+
+# ---------- LAST CLEAN ----------
+facc_cmd_lclean() {
+  _json=0
+  for _a in "$@"; do [ "$_a" = "--json" ] && _json=1; done
+  _last="belum pernah"
+  [ -f /data/adb/facc/last_run ] && _last=$(cat /data/adb/facc/last_run 2>/dev/null)
+  [ -z "$_last" ] && _last="belum pernah"
+  if [ "$_json" = "1" ]; then
+    _el=$(_json_escape "$_last")
+    echo "{\"last_cleanup\":\"$_el\"}"
+  else
+    echo "Last cleanup: $_last"
+  fi
+  unset _json _a _last _el
+}
+
+# ---------- CLEAN LOGS ----------
+facc_cmd_clogs() {
+  _json=0
+  for _a in "$@"; do [ "$_a" = "--json" ] && _json=1; done
+  facc_require_root || { [ "$_json" = "1" ] && echo '{"ok":false,"error":"need root"}'; return 1; }
+  _log="$FACC_LOG_FILE"
+  command -v facc_log >/dev/null 2>&1 || _log="/sdcard/facc-log/facc.log"
+  _dir=$(dirname "$_log" 2>/dev/null)
+  [ -z "$_dir" ] && _dir="/sdcard/facc-log"
+  : > "$_log" 2>/dev/null
+  : > "$_dir/latest.log" 2>/dev/null
+  rm -f "$_dir"/archive/*.log 2>/dev/null
+  facc_log_info "Logs cleared by user (via CLI)"
+  if [ "$_json" = "1" ]; then
+    echo '{"ok":true}'
+  else
+    echo "✔ Log direset: $_log"
+  fi
+  unset _json _a _log _dir
+}
+
 # ---------- MENU INTERAKTIF ----------
 facc_menu() {
   while true; do
@@ -335,6 +502,12 @@ case "$1" in
   --status|status) shift; facc_cmd_status "$@" ;;
   --logs|logs) shift; facc_cmd_logs "$@" ;;
   --config|config) shift; facc_cmd_config "$@" ;;
+  --autoclean|-ac) shift; facc_cmd_autoclean "$@" ;;
+  --acon) shift; facc_cmd_acon "$@" ;;
+  --acoof) shift; facc_cmd_acoof "$@" ;;
+  --acstatus) shift; facc_cmd_acstatus "$@" ;;
+  --lclean) shift; facc_cmd_lclean "$@" ;;
+  --clogs|clogs) shift; facc_cmd_clogs "$@" ;;
   --version|-v|version) facc_version ;;
   --help|-h|help) facc_help ;;
   *) echo "Argumen tidak dikenal: $1"; echo ""; facc_help; exit 1 ;;
