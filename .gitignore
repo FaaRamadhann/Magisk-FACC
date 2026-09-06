@@ -3,12 +3,6 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Zip lama (hanya zip rilis terbaru yang di-commit)
-FACC-v1.0.0.zip
-FACC-v1.0.1.zip
-FACC-v1.0.2.zip
-FACC-v1.0.3.zip
-
 # OS / editor
 .DS_Store
 Thumbs.db
