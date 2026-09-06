@@ -4,9 +4,12 @@
 Repo root = module root (mirip Magisk-Python): module.prop ada di sini.
 
 Pakai:
-    python zip.py              -> output FACC-v<version>.zip di folder ini
-    python zip.py -o out.zip   -> nama file custom
-    python zip.py --no-version -> output FACC.zip tanpa versi
+    python zip.py              -> output build/FACC-v<version>.zip
+    python zip.py -o out.zip   -> output build/out.zip (atau path absolut)
+    python zip.py --no-version -> output build/FACC.zip tanpa versi
+
+Hasil TIDAK di-commit ke git (lihat .gitignore: build/, *.zip).
+Distribusi via upload manual ke GitHub Releases.
 
 Catatan backslash (Windows):
     - Script ini TIDAK memakai string path Windows mentah seperti
@@ -45,7 +48,8 @@ REQUIRED = [
 
 # File/dir yang dikecualikan dari zip (file dev, bukan bagian module).
 # "FACC" = sisa folder kosong lama (struktur sebelum v1.0.4); abaikan bila ada.
-EXCLUDE_DIRS = {"temp", "__pycache__", ".git", ".hg", ".svn", "archive", "FACC"}
+# "build" = output zip lokal, jangan ikut ke-pack.
+EXCLUDE_DIRS = {"temp", "__pycache__", ".git", ".hg", ".svn", "archive", "FACC", "build"}
 EXCLUDE_FILES = {".DS_Store", "Thumbs.db", "zip.py", ".gitignore", ".gitattributes"}
 EXCLUDE_SUFFIXES = {".pyc", ".pyo", ".zip"}
 
@@ -139,20 +143,23 @@ def build(module_dir: pathlib.Path, out_zip: pathlib.Path) -> pathlib.Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Pack FACC menjadi zip Magisk.")
+    ap = argparse.ArgumentParser(description="Pack repo menjadi zip Magisk di build/.")
     ap.add_argument("-o", "--output", default=None,
-                    help="Nama file output (default: FACC-v<version>.zip)")
+                    help="Nama file output di build/ (default: FACC-v<version>.zip)")
     ap.add_argument("--no-version", action="store_true",
-                    help="Output FACC.zip tanpa versi")
+                    help="Output build/FACC.zip tanpa versi")
     args = ap.parse_args(argv)
 
+    outdir = ROOT / "build"
+    outdir.mkdir(parents=True, exist_ok=True)
     version = read_version(MODULE_DIR)
     if args.output:
-        out = (ROOT / args.output).resolve()
+        out = pathlib.Path(args.output)
+        out = out if out.is_absolute() else (outdir / out.name)
     elif args.no_version:
-        out = ROOT / "FACC.zip"
+        out = outdir / "FACC.zip"
     else:
-        out = ROOT / f"FACC-v{version}.zip"
+        out = outdir / f"FACC-v{version}.zip"
 
     result = build(MODULE_DIR, out)
     size_kb = result.stat().st_size / 1024

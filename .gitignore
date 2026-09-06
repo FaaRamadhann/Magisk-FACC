@@ -3,6 +3,10 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Build output (zip di-build lokal ke build/, distribusi via Releases)
+build/
+*.zip
+
 # OS / editor
 .DS_Store
 Thumbs.db

@@ -48,7 +48,7 @@ python zip.py
 Perintah `python zip.py` menghasilkan file:
 
 ```
-FACC-v1.0.4.zip
+build/FACC-v1.0.4.zip
 ```
 
 **Langkah 1 — Hubungkan HP ke PC:**
@@ -64,7 +64,7 @@ adb devices
 **Langkah 2 — Push zip ke HP:**
 
 ```
-adb push FACC-v1.0.4.zip /sdcard/
+adb push build/FACC-v1.0.4.zip /sdcard/
 ```
 
 **Langkah 3 — Install lewat manager root (dari HP):**
@@ -109,7 +109,7 @@ python zip.py
 **Langkah 3 — Pindahkan zip ke penyimpanan (agar bisa dipilih manager):**
 
 ```
-cp FACC-v1.0.4.zip /sdcard/
+cp build/FACC-v1.0.4.zip /sdcard/
 ```
 
 **Langkah 4 — Install via manager root:**
