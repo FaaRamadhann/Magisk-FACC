@@ -1,7 +1,3 @@
-# Catatan internal & scratch (jangan push)
-task.md
-temp/
-
 # Python
 __pycache__/
 *.pyc
