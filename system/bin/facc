@@ -3,7 +3,7 @@
 # CLI First: semua kemampuan WebUI & scheduler memanggil CLI ini.
 # Aman: CLI hanya memanggil clean_cache() dari core.sh, tidak ada rm sendiri.
 
-FACC_VERSION="1.0.4"
+FACC_VERSION="1.0.5"
 
 # Resolve MODDIR (Magisk / KernelSU / manual)
 MODDIR="${MODDIR:-}"
@@ -70,7 +70,7 @@ Perintah:
   --autoclean M [--json] Set interval auto-clean (M = 5-1440 menit)
   -ac M [--json]         Alias --autoclean
   --acon [--json]        Aktifkan auto-clean
-  --acoof [--json]       Matikan auto-clean
+  --acoff [--json]       Matikan auto-clean
   --acstatus [--json]    Status auto-clean (on/off + interval)
   --lclean [--json]      Waktu cleanup terakhir
   --version              Tampilkan versi
@@ -83,7 +83,7 @@ Contoh:
   su -c "facc --status --json"
   su -c "facc --autoclean 60"
   su -c "facc -ac 120"
-  su -c "facc --acoof"
+  su -c "facc --acoff"
 EOF
 }
 
@@ -379,7 +379,7 @@ facc_cmd_acon() {
   unset _json _a _iv
 }
 
-facc_cmd_acoof() {
+facc_cmd_acoff() {
   _json=0
   for _a in "$@"; do [ "$_a" = "--json" ] && _json=1; done
   facc_require_root || { [ "$_json" = "1" ] && echo '{"ok":false,"error":"need root"}'; return 1; }
@@ -504,7 +504,7 @@ case "$1" in
   --config|config) shift; facc_cmd_config "$@" ;;
   --autoclean|-ac) shift; facc_cmd_autoclean "$@" ;;
   --acon) shift; facc_cmd_acon "$@" ;;
-  --acoof) shift; facc_cmd_acoof "$@" ;;
+  --acoff) shift; facc_cmd_acoff "$@" ;;
   --acstatus) shift; facc_cmd_acstatus "$@" ;;
   --lclean) shift; facc_cmd_lclean "$@" ;;
   --clogs|clogs) shift; facc_cmd_clogs "$@" ;;

@@ -34,7 +34,7 @@ if [ -z "$__FACC_LOGGER_LOADED" ]; then
   facc_log_error() { echo "ERROR: $*" >&2; }
 fi
 
-FACC_VERSION="${FACC_VERSION:-1.0.4}"
+FACC_VERSION="${FACC_VERSION:-1.0.5}"
 
 # Direktori data yang dipindai per user. Owner 0 ada di /data/data.
 # Multi-user lain di /data/user/<id>/.
