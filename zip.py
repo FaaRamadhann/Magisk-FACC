@@ -44,6 +44,7 @@ REQUIRED = [
     "common/logger.sh",
     "config/facc.conf",
     "webroot/index.html",
+    "manager/manager.apk",
 ]
 
 # File/dir yang dikecualikan dari zip (file dev, bukan bagian module).
@@ -81,6 +82,12 @@ def should_skip(path: pathlib.Path, module_dir: pathlib.Path) -> bool:
     rel = path.relative_to(module_dir)
     if any(part in EXCLUDE_DIRS for part in rel.parts):
         return True
+    # Module hanya include manager/manager.apk (hasil build.bat).
+    # Source manager (src/, res/, AndroidManifest.xml, build.bat, keystore)
+    # JANGAN ikut ke-pack ke zip module.
+    if rel.parts and rel.parts[0] == "manager":
+        if rel.as_posix() != "manager/manager.apk":
+            return True
     if path.is_file():
         if path.name in EXCLUDE_FILES:
             return True

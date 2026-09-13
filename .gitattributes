@@ -8,3 +8,7 @@ system/bin/facc text eol=lf
 *.html text eol=lf
 *.md text eol=lf
 *.py text eol=lf
+# Source manager app (aapt/javac aman LF; cegah autocrlf Windows)
+*.java text eol=lf
+*.xml text eol=lf
+*.bat text eol=lf

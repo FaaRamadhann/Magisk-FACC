@@ -160,19 +160,40 @@ su -c "facc --clogs"         # reset/hapus log
 ```
 Magisk-FACC/
 ├── module.prop            # Metadata modul (id facc, Faa Ramadhan)
-├── customize.sh           # Instalasi: permission + config + log dir
+├── customize.sh           # Instalasi: permission + config + log dir + install manager.apk
 ├── uninstall.sh           # Cleanup saat module dihapus
 ├── action.sh              # Tombol Action di manager
 ├── service.sh             # Scheduler auto-clean (jalan saat boot)
-├── zip.py                 # Packing repo jadi .zip
+├── zip.py                 # Packing repo jadi .zip (hanya include manager/manager.apk)
 ├── LICENSE
 ├── system/bin/facc        # CLI utama (CLI First)
 ├── common/                # Engine: core.sh (validate/safe/size/clean/verify)
 │                          # + logger.sh — independen dari UI
 ├── config/facc.conf       # Default config
 ├── webroot/               # WebUI (HTML/CSS/JS via exec bridge)
+├── manager/               # Companion app (tanpa Gradle, copy dari FAACC/manager)
+│   ├── manager.apk        # Hasil build, ikut ke-pack module + auto-install via pm
+│   ├── build.bat / build.py # Build APK (javac+d8+aapt ala Example-Build)
+│   ├── AndroidManifest.xml# package com.faa.facc, v1.0.5
+│   ├── src/com/faa/facc/  # MainActivity.java + RootShell.java (CLI facc)
+│   ├── res/drawable/icon.png
+│   └── debug.keystore     # Backup! Update APK wajib key yang sama
 └── tests/test_facc.sh     # Safety tests (harus: N lulus, 0 gagal)
 ```
+
+### Build manager.apk (tanpa Gradle)
+
+```
+cd manager
+build.bat
+:: atau: python build.py
+```
+
+Hasil: `manager/manager.apk` (sekaligus `manager/build/manager.apk`).
+Lalu pack module seperti biasa: `python zip.py` → `build/FACC-v1.0.5.zip`
+berisi `manager/manager.apk`, dan `customize.sh` akan `pm install -r`
+otomatis saat module diinstall. Repo app:
+https://github.com/FaaRamadhann/Magisk-FACC
 
 ## Troubleshooting
 
@@ -180,6 +201,9 @@ Masalah | Solusi
 `core.sh tidak ditemukan` | Reboot setelah install/update agar overlay aktif
 WebUI mock (indikator merah) | Buka dari MMRL/WebUI Next, bukan browser; allow API di MMRL v5.30+
 `facc` command not found | Jalankan sebagai root: `su -c facc`
+`/system/bin/facc: No such file` padahal file ada | File kena CRLF Windows — pastikan LF (repo sudah paksa `eol=lf` di `.gitattributes` untuk `system/bin/facc` & `*.sh`); rebuild zip setelah fix
+Manager tidak detect module / prompt su tidak muncul | Beri root ke app: Magisk → Superuser → allow `com.faa.facc`; kalau SuList enforced, tambahkan app ke allowlist dulu, lalu buka ulang app
+Manager gagal update (signature) | Update wajib key sama (`manager/debug.keystore` di-backup di repo); kalau key beda, `pm uninstall com.faa.facc` dulu baru install
 Scheduler tidak jalan | Cek `/data/adb/facc/facc.conf` (`AUTO_CLEAN=1`) dan log `/sdcard/facc-log/`
 
 ## Lisensi

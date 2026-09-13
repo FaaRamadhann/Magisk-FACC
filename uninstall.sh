@@ -14,4 +14,8 @@ rm -f /data/adb/service.d/facc_service.sh 2>/dev/null
 # Hapus manual jika mau bersih total:
 #   rm -rf /sdcard/facc-log /data/adb/facc
 
+# NOTE: FACC Manager (com.faa.facc) sengaja TIDAK di-uninstall otomatis
+# agar aplikasi tetap bisa dipakai setelah module dihapus.
+# Hapus manual bila perlu: pm uninstall com.faa.facc
+
 exit 0
